@@ -1,11 +1,14 @@
-#!/usr/bin/env python3
-# Based on https://python101.readthedocs.io/pl/latest/pygame/pong/#
-import pygame
 from typing import Type
+import matplotlib.pyplot as plt
+import numpy as np
 import skfuzzy as fuzz
-import skfuzzy.control as fuzzcontrol
+from skfuzzy import control as ctrl
+import pygame
 
-FPS = 30
+# import skfuzzy as fuzz
+# import skfuzzy.control as fuzzcontrol
+
+FPS = 60
 
 
 class Board:
@@ -38,12 +41,12 @@ class Drawable:
 
 class Ball(Drawable):
     def __init__(
-        self,
-        x: int,
-        y: int,
-        radius: int = 20,
-        color=(255, 10, 0),
-        speed: int = 3,
+            self,
+            x: int,
+            y: int,
+            radius: int = 20,
+            color=(255, 10, 0),
+            speed: int = 3,
     ):
         super(Ball, self).__init__(x, y, radius, radius, color)
         pygame.draw.ellipse(self.surface, self.color, [0, 0, self.width, self.height])
@@ -85,12 +88,12 @@ class Ball(Drawable):
         self.rect.y += round(self.y_speed)
 
         if self.rect.x < 0 or self.rect.x > (
-            board.surface.get_width() - self.rect.width
+                board.surface.get_width() - self.rect.width
         ):
             self.bounce_x()
 
         if self.rect.y < 0 or self.rect.y > (
-            board.surface.get_height() - self.rect.height
+                board.surface.get_height() - self.rect.height
         ):
             self.reset()
 
@@ -102,7 +105,7 @@ class Ball(Drawable):
             if self.rect.colliderect(racket.rect):
                 self.last_collision = pygame.time.get_ticks()
                 if (self.rect.right < racket.rect.left + racket.rect.width // 4) or (
-                    self.rect.left > racket.rect.right - racket.rect.width // 4
+                        self.rect.left > racket.rect.right - racket.rect.width // 4
                 ):
                     self.bounce_y_power()
                 else:
@@ -111,13 +114,13 @@ class Ball(Drawable):
 
 class Racket(Drawable):
     def __init__(
-        self,
-        x: int,
-        y: int,
-        width: int = 80,
-        height: int = 20,
-        color=(255, 255, 255),
-        max_speed: int = 10,
+            self,
+            x: int,
+            y: int,
+            width: int = 80,
+            height: int = 20,
+            color=(255, 255, 255),
+            max_speed: int = 10,
     ):
         super(Racket, self).__init__(x, y, width, height, color)
         self.max_speed = max_speed
@@ -160,7 +163,7 @@ class Player:
 
 class PongGame:
     def __init__(
-        self, width: int, height: int, player1: Type[Player], player2: Type[Player]
+            self, width: int, height: int, player1: Type[Player], player2: Type[Player]
     ):
         pygame.init()
         self.board = Board(width, height)
@@ -194,7 +197,7 @@ class PongGame:
     def handle_events(self):
         for event in pygame.event.get():
             if (event.type == pygame.QUIT) or (
-                event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE
+                    event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE
             ):
                 pygame.quit()
                 return True
@@ -227,83 +230,93 @@ class HumanPlayer(Player):
 # DO NOT MODIFY CODE ABOVE THIS LINE
 # ----------------------------------
 
-# import numpy as np
-# import matplotlib.pyplot as plt
+
+# The FuzzyPlayer class contains all the logic needed to accomplish the task described in README
+# In short, I used TSK method to create rules that control the racket and its speed in relation to the
+# ball's location on the screen
+
+HEIGHT = 400
+WIDTH = 800
+BALL_SPEED = 30
+
+
+def verify_velocity(velocity_arg):
+    if velocity_arg < -BALL_SPEED: return -BALL_SPEED
+    if velocity_arg > BALL_SPEED:
+        return BALL_SPEED
+    else:
+        return velocity_arg
 
 
 class FuzzyPlayer(Player):
     def __init__(self, racket: Racket, ball: Ball, board: Board):
         super(FuzzyPlayer, self).__init__(racket, ball, board)
-        # for Mamdami:
-        # x_dist = fuzz.control.Antecedent...
-        # y_dist = fuzz.control.Antecedent...
-        # velocity = fuzz.control.Consequent...
-        # self.racket_controller = fuzz.control.ControlSystem...
 
-        # visualize Mamdami
-        # x_dist.view()
-        # ...
+        distance_x = ctrl.Antecedent(universe=np.arange(-WIDTH, WIDTH + 1), label="x_dist", )
+        distance_y = ctrl.Antecedent(universe=np.arange(0, HEIGHT + 1), label="y_dist")
 
-        # for TSK:
-        # self.x_universe = np.arange...
-        # self.x_mf = {
-        #     "far_left": fuzz.trapmf(
-        #         self.x_universe,
-        #         [
-        #             ...
-        #         ],
-        #     ),
-        #     ...
-        # }
-        # ...
-        # self.velocity_fx = {
-        #     "f_slow_left": lambda x_diff, y_diff: -1 * (abs(x_diff) + y_diff),
-        #     ...
-        # }
+        velocity = ctrl.Consequent(universe=np.arange(-BALL_SPEED, BALL_SPEED + 1), label="velocity")
 
-        # visualize TSK
-        # plt.figure()
-        # for name, mf in self.x_mf.items():
-        #     plt.plot(self.x_universe, mf, label=name)
-        # plt.legend()
-        # plt.show()
-        # ...
+        corners = racket.width / 2
+        distance_x["left"] = fuzz.trimf(distance_x.universe, [-WIDTH, -WIDTH, -corners])
+        distance_x["center"] = fuzz.trimf(distance_x.universe, [-WIDTH, 0, WIDTH])
+        distance_x["right"] = fuzz.trimf(distance_x.universe, [corners, WIDTH, WIDTH])
+
+        distance_y["high"] = fuzz.trimf(distance_y.universe, [HEIGHT // 2, HEIGHT, HEIGHT])
+        distance_y["mid"] = fuzz.trimf(distance_y.universe, [0, HEIGHT // 2, HEIGHT])
+        distance_y["low"] = fuzz.trimf(distance_y.universe, [0, 0, HEIGHT // 2])
+
+        velocity["left"] = fuzz.trimf(velocity.universe, [-BALL_SPEED, -BALL_SPEED, 0])
+        velocity["stay"] = fuzz.trimf(velocity.universe, [-BALL_SPEED, 0, BALL_SPEED])
+        velocity["right"] = fuzz.trimf(velocity.universe, [0, BALL_SPEED, BALL_SPEED])
+
+        rule1 = ctrl.Rule(
+            distance_x["left"] & (distance_y["low"] | distance_y["mid"] | distance_y["high"]),
+            velocity["left"]
+        )
+        rule2 = ctrl.Rule(
+            distance_x["center"] & (distance_y["low"] | distance_y["mid"] | distance_y["high"]),
+            velocity["stay"]
+        )
+        rule3 = ctrl.Rule(
+            distance_x["right"] & (distance_y["low"] | distance_y["mid"] | distance_y["high"]),
+            velocity["right"]
+        )
+
+        control_system = ctrl.ControlSystem(
+            [
+                rule1,
+                rule2,
+                rule3,
+            ]
+        )
+        self.controller = ctrl.ControlSystemSimulation(control_system)
+        distance_x.view()
+        distance_y.view()
+        velocity.view()
+        plt.show()
 
     def act(self, x_diff: int, y_diff: int):
         velocity = self.make_decision(x_diff, y_diff)
         self.move(self.racket.rect.x + velocity)
 
     def make_decision(self, x_diff: int, y_diff: int):
-        # for Mamdami:
-        # self.racket_controller.compute()
-        # velocity = self.racket_controller.o..
+        self.controller.input['x_dist'] = -x_diff
+        self.controller.input['y_dist'] = y_diff
 
-        # for TSK:
-        # x_vals = {
-        #     name: fuzz.interp_membership(self.x_universe, mf, x_diff)
-        #     for name, mf in self.x_mf.items()
-        # }
-        # ...
-        # rule activations with Zadeh norms
-        # activations = {
-        #     "f_slow_left": max(
-        #         [
-        #             min(x_vals...),
-        #             min(x_vals...),
-        #         ]
-        #     ),
-        #     ...
-        # }
+        self.controller.compute()
 
-        # velocity = sum(
-        #     activations[val] * self.velocity_fx[val](x_diff, y_diff)
-        #     for val in activations
-        # ) / sum(activations[val] for val in activations)
-
-        return 0
+        retval = self.controller.output['velocity'] * 2137
+        return verify_velocity(retval)
 
 
 if __name__ == "__main__":
-    game = PongGame(800, 400, NaiveOponent, HumanPlayer)
-    # game = PongGame(800, 400, NaiveOponent, FuzzyPlayer)
+    # Line 'game = PongGame(800, 400, NaiveOponent, HumanPlayer)'
+    # allows the user to enjoy a game of Pong against the computer opponent
+    # Line 'game = PongGame(800, 400, NaiveOponent, FuzzyPlayer)'
+    # shows how the fuzzy AI works against the computer opponent
+    # Comment and uncomment them accordingly
+
+    # game = PongGame(800, 400, NaiveOponent, HumanPlayer)
+    game = PongGame(800, 400, NaiveOponent, FuzzyPlayer)
     game.run()
